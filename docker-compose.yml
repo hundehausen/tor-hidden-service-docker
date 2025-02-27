@@ -1,0 +1,28 @@
+services:
+  # Example web service
+  web:
+    image: nginx:alpine
+    container_name: web-container
+    volumes:
+      - ./example-site:/usr/share/nginx/html
+    networks:
+      - tor-network
+
+  # Tor hidden service
+  tor:
+    build: .
+    container_name: tor-hidden-service
+    environment:
+      - HS_WEB=web:80:80  # Format: HS_[NAME]=[HOST]:[PORT]:[VIRTUAL_PORT]
+    networks:
+      - tor-network
+    volumes:
+      - tor-data:/var/lib/tor  # Persist onion addresses
+
+networks:
+  tor-network:
+    driver: bridge
+
+volumes:
+  tor-data:
+    driver: local
