@@ -11,9 +11,9 @@ services:
   # Tor hidden service
   tor:
     build: .
-    container_name: tor-hidden-service-2
+    container_name: tor-hidden-service
     environment:
-      HS_WEB: web:80:80-100
+      HS_WEB: web:(80:80-100,9006:9007)
 
     networks:
       - tor-network

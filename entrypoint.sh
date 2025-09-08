@@ -3,6 +3,7 @@
 # ==============================================================================
 # Tor Hidden Service Dynamic Configurator
 # ==============================================================================
+#
 # This script automatically configures Tor hidden services based on environment
 # variables. It is designed to be run as an entrypoint in a Docker container.
 #
@@ -17,10 +18,24 @@
 #   - A single port:           80                  (maps virtual port 80 to target port 80)
 #   - A virtual:target pair:   8080:80             (maps virtual port 8080 to target port 80)
 #   - A range:                 9000-9010           (maps virtual 9000-9010 to target 9000-9010)
+#   - Multi virtual ports:     80:9000-9010           (maps virtual 9000-9010 to target 9000-9010)
 #   - A grouped list:          (80,443,8080:80)    (groups multiple ports for a single host)
 #
-#   Example:
-#   HS_WEBSITE="web:(80,443);api:9000-9005,9006:9007"
+#   Examples:
+#   HS_SINGLE_PORT="web:80"
+#   HS_SET_VIRTUAL_PORT="web:80:81"
+#   HS_PORT_RANGE="web:80-100"
+#   HS_VIRTUAL_PORT_RANGE="web:80:80-100"
+#   HS_GROUP="web:(80:8080,443,443:444,5000-5010,80:80-100)"
+#   HS_MULTI_SERVICES="web:81;web:(80,443);api:9000-9005;electrs:(50001,50002)"
+#
+#   Docker compose example:
+#   
+#   environment:
+#       HS_MULTI_SERVICES: |
+#           web:(80,443);
+#           api:9000-9005;
+#           electrs:(50001,50002)
 #
 # ==============================================================================
 
