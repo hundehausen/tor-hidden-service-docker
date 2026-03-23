@@ -40,7 +40,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     
     - name: Build Docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         platforms: linux/amd64
@@ -73,7 +73,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     
     - name: Build Docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         platforms: linux/amd64
@@ -125,7 +125,7 @@ jobs:
           type=raw,value=tor-${{ env.TOR_VERSION }},enable=${{ env.TOR_VERSION != '' }}
     
     - name: Build and push Docker image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         platforms: linux/amd64,linux/arm64
