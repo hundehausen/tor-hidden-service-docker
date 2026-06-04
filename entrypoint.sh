@@ -67,6 +67,22 @@ else
     echo "SOCKS proxy configured to bind to: ${SOCKS_BIND}:9050"
 fi
 
+# Append a torrc block under a section comment. Strips NUL/CR.
+append_torrc_block() {
+    block_label=$1
+    block_content=$2
+
+    [ -z "$block_content" ] && return 0
+
+    printf '\n# %s\n' "$block_label" >> /etc/tor/torrc
+    printf '%s\n' "$block_content" | tr -d '\000\r' >> /etc/tor/torrc
+
+    echo "==> Appended ${block_label}:"
+    printf '%s\n' "$block_content" | tr -d '\000\r' | sed 's/^/    /'
+}
+
+append_torrc_block "Custom global torrc (TORRC env var)" "${TORRC:-}"
+
 # Security validation functions
 validate_service_name() {
     local name=$1
@@ -193,8 +209,14 @@ create_hidden_service() {
     }
 
     # Add hidden service configuration to torrc
+    printf '\n# Hidden service: %s\n' "$service_name" >> /etc/tor/torrc
     printf 'HiddenServiceDir %s\n' "$service_dir" >> /etc/tor/torrc
     printf 'HiddenServicePort %s %s:%s\n' "$virtual_port" "$target_host" "$target_port" >> /etc/tor/torrc
+
+    # Hyphens in service names become underscores; env names can't have hyphens.
+    hs_torrc_var="HSTORRC_$(printf '%s' "$service_name" | tr '-' '_')"
+    eval "hs_torrc_value=\${${hs_torrc_var}-}"
+    append_torrc_block "Per-service torrc (${hs_torrc_var})" "$hs_torrc_value"
 
     echo "Configured hidden service for $service_name: $target_host:$target_port -> $virtual_port"
 }

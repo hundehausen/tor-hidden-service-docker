@@ -185,6 +185,49 @@ docker run -d \
   api:api-container:8080:80
 ```
 
+### Custom torrc directives
+
+Two env vars accept multi-line torrc content, appended to `/etc/tor/torrc` at boot:
+
+| Variable | Where it lands | Use for |
+|----------|----------------|---------|
+| `TORRC` | After `SocksPort`, before any hidden service section | Global directives |
+| `HSTORRC_<SERVICE>` | After that service's `HiddenServicePort` line | Per-service directives (PoW, IntroDoS, MaxStreams, …) |
+
+Hyphens in service names become underscores (`HS_MY-API` → `HSTORRC_MY_API`).
+Tor validates directives at startup; bad config fails fast in the logs.
+
+```yaml
+services:
+  tor:
+    image: ghcr.io/hundehausen/tor-hidden-service:latest
+    environment:
+      SOCKS_BIND: 127.0.0.1
+      HS_WEB: web:80:80
+      HS_API: api:8080:80
+
+      TORRC: |
+        ClientUseIPv6 1
+
+      HSTORRC_WEB: |
+        HiddenServicePoWDefensesEnabled 1
+        HiddenServicePoWQueueRate 250
+        HiddenServicePoWQueueBurst 1000
+        HiddenServiceEnableIntroDoSDefense 1
+        HiddenServiceEnableIntroDoSRatePerSec 25
+        HiddenServiceEnableIntroDoSBurstPerSec 200
+
+      HSTORRC_API: |
+        HiddenServiceMaxStreams 50
+        HiddenServiceMaxStreamsCloseCircuit 1
+```
+
+Inspect the rendered config:
+
+```bash
+docker exec tor-hidden-service cat /etc/tor/torrc
+```
+
 ## 🛡️ Security
 
 ### Hardening Checklist

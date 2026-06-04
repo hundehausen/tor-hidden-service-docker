@@ -13,10 +13,18 @@ services:
     build: .
     container_name: tor-hidden-service
     environment:
-      - HS_WEB=web:80:80  # Format: HS_[NAME]=[HOST]:[PORT]:[VIRTUAL_PORT]
-      # SECURITY: Set SOCKS_BIND=127.0.0.1 to restrict SOCKS proxy to localhost only
-      # Default is 0.0.0.0 for backward compatibility but will change to 127.0.0.1 in v2.0
-      # - SOCKS_BIND=127.0.0.1
+      # HS_[NAME]: [HOST]:[PORT]:[VIRTUAL_PORT]
+      HS_WEB: web:80:80
+      # SOCKS_BIND: 127.0.0.1   # restrict SOCKS to localhost (default 0.0.0.0 until v2.0)
+      #
+      # Per-HS DoS hardening. See README "Custom torrc directives".
+      # HSTORRC_WEB: |
+      #   HiddenServicePoWDefensesEnabled 1
+      #   HiddenServicePoWQueueRate 250
+      #   HiddenServicePoWQueueBurst 1000
+      #   HiddenServiceEnableIntroDoSDefense 1
+      #   HiddenServiceEnableIntroDoSRatePerSec 25
+      #   HiddenServiceEnableIntroDoSBurstPerSec 200
     networks:
       - tor-network
     volumes:
