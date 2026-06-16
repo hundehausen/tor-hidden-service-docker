@@ -2,7 +2,7 @@
 
 [![Docker Build](https://img.shields.io/github/actions/workflow/status/hundehausen/tor-hidden-service-docker/build.yml?branch=main&style=flat-square)](https://github.com/hundehausen/tor-hidden-service-docker/actions)
 [![Tor Version](https://img.shields.io/badge/Tor-0.4.9.9--r0-purple?style=flat-square)](https://gitweb.torproject.org/tor.git)
-[![Alpine Version](https://img.shields.io/badge/Alpine-3.23-blue?style=flat-square)](https://alpinelinux.org/)
+[![Alpine Version](https://img.shields.io/badge/Alpine-3.24-blue?style=flat-square)](https://alpinelinux.org/)
 
 A lightweight, secure Docker container for running Tor hidden services. Built on Alpine Linux with a focus on minimal footprint and maximum security.
 
@@ -318,7 +318,7 @@ services:
       - tor
 
   api:
-    image: node:18-alpine
+    image: node:24-alpine
     networks:
       - tor
 
