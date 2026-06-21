@@ -22,10 +22,11 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -58,6 +59,10 @@ jobs:
         docker stop tor-test && docker rm tor-test
     
   publish:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name != 'pull_request'
@@ -99,12 +104,35 @@ jobs:
           type=raw,value=tor-${{ env.TOR_VERSION }},enable=${{ env.TOR_VERSION != '' }}
     
     - name: Build and push Docker image
+      id: build
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
         context: .
         platforms: linux/amd64,linux/arm64
         push: true
+        sbom: true
+        provenance: mode=max
         tags: ${{ steps.meta.outputs.tags }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v3.1.1
+
+    - name: Sign the published image digest
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+        TAGS: ${{ steps.meta.outputs.tags }}
+        IMAGE: ghcr.io/${{ github.repository_owner }}/tor-hidden-service
+      shell: bash
+      run: |
+        set -euo pipefail
+        IFS=$'\n\t'
+        images=()
+        for tag in ${TAGS}; do
+          images+=("${tag}@${DIGEST}")
+        done
+        cosign sign --recursive --yes "${images[@]}"
