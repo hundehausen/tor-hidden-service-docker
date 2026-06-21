@@ -17,6 +17,7 @@ A lightweight, secure Docker container for running Tor hidden services. Built on
 - [🔑 Key Persistence](#-key-persistence)
 - [📚 Examples](#-examples)
 - [💓 Health Checks](#-health-checks)
+- [🔐 Supply Chain](#-supply-chain)
 - [🔍 Troubleshooting](#-troubleshooting)
 - [🤝 Contributing](#-contributing)
 
@@ -353,6 +354,44 @@ Check health status:
 ```bash
 docker ps --filter name=tor-hidden-service --format "table {{.Names}}\t{{.Status}}"
 ```
+
+## 🔐 Supply Chain
+
+Every published image on `ghcr.io/hundehausen/tor-hidden-service` ships with three attestations:
+
+- **SBOM** (Software Bill of Materials, SPDX 2.3) — every package inside the image
+- **Provenance** (SLSA v0.2) — how the image was built, from which commit, by which CI
+- **Sigstore signature** — keyless, signed via GitHub OIDC, recorded in Rekor
+
+### Verifying the signature
+
+Requires [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```bash
+cosign verify ghcr.io/hundehausen/tor-hidden-service:latest \
+  --certificate-identity-regexp 'https://github\.com/hundehausen/tor-hidden-service-docker/\.github/workflows/.+' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+```
+
+Exit code 0 and a JSON payload listing one signature means the image was built by this repo's CI — not a third-party reupload.
+
+### Inspecting the SBOM
+
+```bash
+docker buildx imagetools inspect ghcr.io/hundehausen/tor-hidden-service:latest \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX }}'
+```
+
+Returns SPDX JSON listing every Alpine package and version inside the image.
+
+### Inspecting provenance
+
+```bash
+docker buildx imagetools inspect ghcr.io/hundehausen/tor-hidden-service:latest \
+  --format '{{ json .Provenance }}'
+```
+
+Returns SLSA v0.2 JSON with the source repo URL, commit SHA, builder version, and platform. Confirms the image came from this repo's `main` branch at a specific commit.
 
 ## 🔍 Troubleshooting
 
