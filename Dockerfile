@@ -4,7 +4,7 @@ LABEL maintainer="hundehausen"
 LABEL description="Tor Hidden Service Docker Image"
 
 # Set Tor version - this will be updated by DependencyBot
-ENV TOR_VERSION=0.4.9.10-r0
+ENV TOR_VERSION=0.4.9.11-r0
 
 # Install packages & Create directory
 RUN apk add --no-cache \
