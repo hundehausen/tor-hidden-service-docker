@@ -57,9 +57,19 @@ jobs:
     - name: Test Docker image
       run: |
         docker run --name tor-test -d tor-hidden-service:test
-        sleep 15
+        # Poll up to 90s for full bootstrap. QEMU-emulated arm64 is much
+        # slower than native amd64, so a fixed sleep is unreliable across
+        # architectures.
+        deadline=$((SECONDS + 90))
+        until docker logs tor-test 2>&1 | grep -q "Bootstrapped 100%"; do
+          if [ $SECONDS -ge $deadline ]; then
+            echo "::error::Tor did not reach Bootstrapped 100% within 90s"
+            docker logs tor-test
+            exit 1
+          fi
+          sleep 2
+        done
         docker logs tor-test
-        docker logs tor-test | grep -q "Bootstrapped 100%" || exit 1
         docker stop tor-test && docker rm tor-test
     
   publish:
