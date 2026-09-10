@@ -87,13 +87,13 @@ append_torrc_block "Custom global torrc (TORRC env var)" "${TORRC:-}"
 validate_service_name() {
     local name=$1
     # Allow only alphanumeric, hyphens, and underscores
-    # Prevent path traversal (../), directory traversal, and special characters
-    # Use grep for validation to avoid shell escaping issues
-    if echo "$name" | grep -qE '[/\\]|\.\.|\*|\?|<|>|\||&|;|\$|\`'; then
-        echo "ERROR: Invalid service name: '$name'" >&2
-        echo "ERROR: Service names must not contain path separators, '..' or special characters" >&2
-        return 1
-    fi
+    case "$name" in
+        *[!a-zA-Z0-9_-]*)
+            echo "ERROR: Invalid service name: '$name'" >&2
+            echo "ERROR: Service names may only contain letters, digits, hyphens, and underscores" >&2
+            return 1
+            ;;
+    esac
     
     # Check length (max 64 chars for directory name)
     if [ ${#name} -gt 64 ] || [ ${#name} -eq 0 ]; then
@@ -215,7 +215,7 @@ create_hidden_service() {
 
     # Hyphens in service names become underscores; env names can't have hyphens.
     hs_torrc_var="HSTORRC_$(printf '%s' "$service_name" | tr '-' '_')"
-    eval "hs_torrc_value=\${${hs_torrc_var}-}"
+    hs_torrc_value=$(printenv "$hs_torrc_var" 2>/dev/null || true)
     append_torrc_block "Per-service torrc (${hs_torrc_var})" "$hs_torrc_value"
 
     echo "Configured hidden service for $service_name: $target_host:$target_port -> $virtual_port"
