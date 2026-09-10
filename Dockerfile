@@ -11,14 +11,13 @@ RUN apk add --no-cache \
     tor=${TOR_VERSION} \
     curl \
     ca-certificates \
-    su-exec \
     && chown -R tor:tor /var/lib/tor/ \
     && chmod -R 700 /var/lib/tor/ \
     && rm -rf /var/cache/apk/*
 
 # Copy configuration files and scripts
 COPY torrc /etc/tor/torrc
-COPY entrypoint.sh /entrypoint.sh
+COPY --chown=tor:tor entrypoint.sh /entrypoint.sh
 
 # Make the entrypoint script executable
 RUN chmod +x /entrypoint.sh
@@ -29,8 +28,11 @@ CMD curl -sS --socks5-hostname localhost:9050 https://check.torproject.org/ | gr
 # Expose the Tor SOCKS port
 EXPOSE 9050
 
+# Run as the unprivileged tor user (uid 100, gid 101)
+USER tor
+
 # Set the entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command
-CMD ["tor", "-f", "/etc/tor/torrc"]
+CMD ["tor"]
