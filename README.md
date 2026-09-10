@@ -374,6 +374,16 @@ Every published image on `ghcr.io/hundehausen/tor-hidden-service` ships with thr
 - **Provenance** (SLSA v0.2) — how the image was built, from which commit, by which CI
 - **Sigstore signature** — keyless, signed via GitHub OIDC, recorded in Rekor
 
+### Pinned build inputs
+
+Rebuilds resolve the same bytes:
+
+- **Base image** — `alpine:3.24` pinned by digest in the `Dockerfile`
+- **Alpine packages** — `tor`, `curl`, and `ca-certificates` pinned to exact versions via the `*_VERSION` env vars
+- **GitHub Actions** — pinned to commit SHAs
+
+Dependabot raises PRs for base-image digest and Actions updates. It cannot track `apk` packages, so those are bumped manually ([pkgs.alpinelinux.org](https://pkgs.alpinelinux.org/packages?name=tor&branch=v3.24)). If a build fails with `unable to select packages`, a pinned revision was removed from the v3.24 branch — update the `*_VERSION` values in the `Dockerfile`.
+
 ### Verifying the signature
 
 Requires [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
