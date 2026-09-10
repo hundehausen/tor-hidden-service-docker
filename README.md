@@ -188,7 +188,7 @@ docker run -d \
 
 ### Custom torrc directives
 
-Two env vars accept multi-line torrc content, appended to `/etc/tor/torrc` at boot:
+Two env vars accept multi-line torrc content, appended to `/var/lib/tor/torrc` at boot:
 
 | Variable | Where it lands | Use for |
 |----------|----------------|---------|
@@ -226,7 +226,7 @@ services:
 Inspect the rendered config:
 
 ```bash
-docker exec tor-hidden-service cat /etc/tor/torrc
+docker exec tor-hidden-service cat /var/lib/tor/torrc
 ```
 
 ## 🛡️ Security
@@ -236,12 +236,21 @@ docker exec tor-hidden-service cat /etc/tor/torrc
 - 📊 **Set resource limits** - Prevent resource exhaustion (see [Usage](#-usage))
 - 🔐 **Restrict SOCKS proxy** - Set `SOCKS_BIND=127.0.0.1` in production
 - 💾 **Persist keys securely** - Mount `/var/lib/tor` as a volume, never commit keys to git
+- 👤 **Own your volumes** - The container runs as uid 100 / gid 101; bind mounts must be owned by that user
 
 ### Protecting Your Keys
 
 The `hs_ed25519_secret_key` files in `/var/lib/tor/[service]/` are the cryptographic identity of your `.onion` address. If compromised, an attacker can impersonate your service.
 
 ⚠️ **Never commit private keys to version control.**
+
+### Running as Non-Root
+
+The container runs as the unprivileged `tor` user (uid 100, gid 101) and no process runs as root. Tor renders its configuration from the read-only `/etc/tor/torrc` into `/var/lib/tor/torrc` at startup, so `/var/lib/tor` must be writable by uid 100:
+
+- **Named volumes** work without changes; a fresh volume inherits ownership from the image.
+- **Bind mounts** must be owned by the container user: `sudo chown -R 100:101 ./keys`.
+- **Kubernetes** needs `securityContext.runAsUser: 100`, `runAsGroup: 101`, and `fsGroup: 101`.
 
 ### Input Validation
 
@@ -268,6 +277,8 @@ volumes:
   - ./backup-keys/WEB:/var/lib/tor/WEB  # Restore specific service
   - ./backup-keys/API:/var/lib/tor/API
 ```
+
+> **Ownership:** Bind-mounted key directories must be owned by uid 100 / gid 101 (`sudo chown -R 100:101 ./backup-keys`).
 
 ### Backing Up Keys
 
@@ -398,7 +409,7 @@ Returns SLSA v0.2 JSON with the source repo URL, commit SHA, builder version, an
 ### Can't connect to hidden service
 
 1. Verify Tor bootstrap: `docker logs tor-hidden-service | grep "Bootstrapped 100%"`
-2. Check service configuration: `docker exec tor-hidden-service cat /etc/tor/torrc`
+2. Check service configuration: `docker exec tor-hidden-service cat /var/lib/tor/torrc`
 3. Ensure target container is reachable: `docker exec tor-hidden-service ping web`
 
 ### Onion address keeps changing
@@ -419,6 +430,14 @@ deploy:
   resources:
     limits:
       memory: 256M
+```
+
+### Permission denied on /var/lib/tor
+
+The container runs as uid 100 / gid 101. If you bind-mount a host directory, chown it first:
+
+```bash
+sudo chown -R 100:101 ./tor-data
 ```
 
 ## 🤝 Contributing

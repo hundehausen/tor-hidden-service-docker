@@ -1,45 +1,24 @@
 #!/bin/sh
 set -e
 
-# Signal handling for graceful shutdown
-TOR_PID=""
+# Runtime configuration is generated on the data volume, which the tor user owns
+TORRC_FILE=/var/lib/tor/torrc
 
-shutdown_tor() {
-    echo "Received shutdown signal, stopping Tor gracefully..."
-    if [ -n "$TOR_PID" ] && kill -0 "$TOR_PID" 2>/dev/null; then
-        # Send SIGTERM to Tor to initiate graceful shutdown
-        kill -TERM "$TOR_PID" 2>/dev/null
-        # Wait for Tor to exit (with timeout)
-        local count=0
-        while kill -0 "$TOR_PID" 2>/dev/null && [ $count -lt 30 ]; do
-            sleep 1
-            count=$((count + 1))
-        done
-        # If still running, force kill
-        if kill -0 "$TOR_PID" 2>/dev/null; then
-            echo "Tor did not exit gracefully, forcing shutdown..."
-            kill -KILL "$TOR_PID" 2>/dev/null
-        fi
-    fi
-    exit 0
-}
-
-# Trap SIGTERM and SIGINT for graceful shutdown
-trap 'shutdown_tor' TERM INT
-
-# Ensure Tor data directory exists with correct permissions
+# Ensure Tor data directory exists and is writable
 # This must be done before creating any hidden service subdirectories
 if [ ! -d /var/lib/tor ]; then
-    mkdir -p /var/lib/tor
+    echo "ERROR: /var/lib/tor does not exist. Mount a volume at /var/lib/tor." >&2
+    exit 1
 fi
-chown tor:tor /var/lib/tor
-chmod 700 /var/lib/tor
 
-# Start with a clean torrc configuration
-# Keep the basic configuration and remove any hidden service entries
-grep -v "HiddenService" /etc/tor/torrc > /tmp/torrc.new
-cat /tmp/torrc.new > /etc/tor/torrc
-rm /tmp/torrc.new
+if ! chmod 700 /var/lib/tor 2>/dev/null; then
+    echo "ERROR: /var/lib/tor must be owned by uid $(id -u):$(id -g) and writable." >&2
+    echo "ERROR: For bind mounts, chown -R 100:101 the host directory." >&2
+    exit 1
+fi
+
+# Build the runtime torrc from the image's read-only copy
+cp /etc/tor/torrc "$TORRC_FILE"
 
 # Configure SOCKS proxy bind address
 # SECURITY DEPRECATION: Defaulting to 0.0.0.0 for backward compatibility.
@@ -49,13 +28,8 @@ rm /tmp/torrc.new
 SOCKS_BIND_EXPLICIT=${SOCKS_BIND}
 SOCKS_BIND=${SOCKS_BIND:-0.0.0.0}
 
-# Remove any existing SocksPort configuration and add the new one
-grep -v "^SocksPort" /etc/tor/torrc > /tmp/torrc.new
-cat /tmp/torrc.new > /etc/tor/torrc
-rm /tmp/torrc.new
-
 # Add the SOCKS port configuration
-echo "SocksPort ${SOCKS_BIND}:9050" >> /etc/tor/torrc
+echo "SocksPort ${SOCKS_BIND}:9050" >> "$TORRC_FILE"
 
 # Log the configuration with security warning if using default
 if [ -z "$SOCKS_BIND_EXPLICIT" ] && [ "$SOCKS_BIND" = "0.0.0.0" ]; then
@@ -74,8 +48,8 @@ append_torrc_block() {
 
     [ -z "$block_content" ] && return 0
 
-    printf '\n# %s\n' "$block_label" >> /etc/tor/torrc
-    printf '%s\n' "$block_content" | tr -d '\000\r' >> /etc/tor/torrc
+    printf '\n# %s\n' "$block_label" >> "$TORRC_FILE"
+    printf '%s\n' "$block_content" | tr -d '\000\r' >> "$TORRC_FILE"
 
     echo "==> Appended ${block_label}:"
     printf '%s\n' "$block_content" | tr -d '\000\r' | sed 's/^/    /'
@@ -209,9 +183,9 @@ create_hidden_service() {
     }
 
     # Add hidden service configuration to torrc
-    printf '\n# Hidden service: %s\n' "$service_name" >> /etc/tor/torrc
-    printf 'HiddenServiceDir %s\n' "$service_dir" >> /etc/tor/torrc
-    printf 'HiddenServicePort %s %s:%s\n' "$virtual_port" "$target_host" "$target_port" >> /etc/tor/torrc
+    printf '\n# Hidden service: %s\n' "$service_name" >> "$TORRC_FILE"
+    printf 'HiddenServiceDir %s\n' "$service_dir" >> "$TORRC_FILE"
+    printf 'HiddenServicePort %s %s:%s\n' "$virtual_port" "$target_host" "$target_port" >> "$TORRC_FILE"
 
     # Hyphens in service names become underscores; env names can't have hyphens.
     hs_torrc_var="HSTORRC_$(printf '%s' "$service_name" | tr '-' '_')"
@@ -277,10 +251,6 @@ for arg in "$@"; do
     esac
 done
 
-# Make sure the Tor data directory has correct permissions
-chown -R tor:tor /var/lib/tor
-chmod -R 700 /var/lib/tor
-
 # Print all onion addresses after a short delay to allow Tor to generate them
 print_onion_addresses() {
     sleep 10
@@ -298,34 +268,18 @@ print_onion_addresses() {
 # Start printing onion addresses in the background
 print_onion_addresses &
 
-# Start Tor with signal handling support
-start_tor() {
-    echo "Starting Tor..."
-    su-exec tor "$@" &
-    TOR_PID=$!
-    
-    # Wait for Tor process to complete
-    wait $TOR_PID
-    local exit_code=$?
-    
-    # Clear TOR_PID since process has exited
-    TOR_PID=""
-    
-    return $exit_code
-}
+echo "Starting Tor..."
 
-# If no arguments were provided, run Tor with the default config as the tor user
+# If no arguments were provided, run Tor with the generated config
 if [ $# -eq 0 ]; then
-    start_tor tor -f /etc/tor/torrc
-    exit $?
+    exec tor -f "$TORRC_FILE"
 fi
 
-# If the first argument is "tor", run it as the tor user
+# If the first argument is "tor", run it with the generated config
 if [ "$1" = "tor" ]; then
     shift
-    start_tor tor "$@"
-    exit $?
+    exec tor -f "$TORRC_FILE" "$@"
 fi
 
-# Otherwise, run the command as-is (signals won't be handled gracefully for custom commands)
+# Otherwise, run the command as-is
 exec "$@"
