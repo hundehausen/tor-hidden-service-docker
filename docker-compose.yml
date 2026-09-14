@@ -12,6 +12,8 @@ services:
   tor:
     build: .
     container_name: tor-hidden-service
+    depends_on:
+      - web
     environment:
       # HS_[NAME]: [HOST]:[PORT]:[VIRTUAL_PORT]
       HS_WEB: web:80:80
@@ -28,7 +30,7 @@ services:
     networks:
       - tor-network
     volumes:
-      - tor-data:/var/lib/tor  # Persist onion addresses
+      - tor-data:/var/lib/tor # Persist onion addresses
     # Resource limits to prevent resource exhaustion attacks
     deploy:
       resources:
