@@ -9,7 +9,7 @@ LABEL description="Tor Hidden Service Docker Image"
 # Packages are pinned so rebuilds resolve the same bytes. Alpine keeps only the
 # newest revision per branch, so when a pinned package disappears from v3.24,
 # bump it here and rebuild: https://pkgs.alpinelinux.org/packages?branch=v3.24
-ENV TOR_VERSION=0.4.9.15-r0
+ENV TOR_VERSION=0.4.9.17-r0
 ENV CURL_VERSION=8.23.0-r0
 ENV CA_CERTIFICATES_VERSION=20261020-r0
 
