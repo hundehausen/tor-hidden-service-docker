@@ -127,6 +127,101 @@ validate_hostname() {
     return 0
 }
 
+# Write authorized_clients/<client>.auth for each <client>:<key> entry
+write_client_auth() {
+    local service_name=$1
+    local service_dir=$2
+    local hs_auth_var=$3
+    local hs_auth_value=$4
+    local auth_dir="${service_dir}/authorized_clients"
+    local clients=" "
+    local count=0
+    local entry
+    local client
+    local key
+
+    # Unset or empty: leave authorized_clients as it is
+    [ -z "$hs_auth_value" ] && return 0
+
+    # Validate all entries before touching authorized_clients.
+    # Entries are separated by spaces, tabs or newlines. Heredoc, not a pipe:
+    # the loop must run in this shell for clients and return 1 to work.
+    while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+
+        # Each entry is <client-name>:<key>
+        case "$entry" in
+            *:*) ;;
+            *)
+                echo "ERROR: Invalid client entry for service '$service_name': '$entry'" >&2
+                echo "ERROR: Entries must be <client-name>:<key>" >&2
+                return 1
+                ;;
+        esac
+
+        client=${entry%%:*}
+        key=${entry#*:}
+        key=${key#descriptor:x25519:}
+
+        # Check client name
+        case "$client" in
+            ''|*[!a-zA-Z0-9_-]*)
+                echo "ERROR: Invalid client name for service '$service_name': '$client'" >&2
+                echo "ERROR: Client names may only contain letters, digits, hyphens, and underscores" >&2
+                return 1
+                ;;
+        esac
+
+        # Check key: base32 x25519 public key, 52 characters without padding
+        case "$key" in
+            *[!A-Z2-7]*) key= ;;
+        esac
+        if [ ${#key} -ne 52 ]; then
+            echo "ERROR: Invalid client key for service '$service_name': '$client'" >&2
+            echo "ERROR: Client keys must be 52 base32 characters (A-Z, 2-7, no padding)" >&2
+            return 1
+        fi
+
+        # Check for duplicate client names
+        case "$clients" in
+            *" $client:"*)
+                echo "ERROR: Duplicate client for service '$service_name': '$client'" >&2
+                return 1
+                ;;
+        esac
+
+        clients="$clients$client:$key "
+        count=$((count + 1))
+    done <<EOF
+$(printf '%s\n' "$hs_auth_value" | tr -d '\000\r' | tr -s ' \t\n' '\n')
+EOF
+
+    # Set but without a single client: refuse rather than run the service open
+    if [ "$count" -eq 0 ]; then
+        echo "ERROR: No clients in ${hs_auth_var} for service '$service_name'" >&2
+        return 1
+    fi
+
+    # The variable is the complete list: replace all existing .auth files
+    mkdir -p "$auth_dir" || {
+        echo "ERROR: Failed to create directory: $auth_dir" >&2
+        return 1
+    }
+    rm -f "$auth_dir"/*.auth || {
+        echo "ERROR: Failed to remove old client keys in: $auth_dir" >&2
+        return 1
+    }
+    # Validated entries contain no whitespace or glob characters
+    for entry in $clients; do
+        printf 'descriptor:x25519:%s\n' "${entry#*:}" > "${auth_dir}/${entry%%:*}.auth" || {
+            echo "ERROR: Failed to write client key: ${auth_dir}/${entry%%:*}.auth" >&2
+            return 1
+        }
+    done
+
+    echo "Configured client authorization for $service_name: $count client(s)"
+}
+
 # Function to create a hidden service configuration
 create_hidden_service() {
     local service_name=$1
@@ -172,6 +267,12 @@ create_hidden_service() {
         echo "Found existing keys for hidden service: $service_name"
     fi
     
+    # Client authorization keys, written before the permissions are fixed below.
+    # Hyphens in service names become underscores; env names can't have hyphens.
+    hs_auth_var="HSAUTH_$(printf '%s' "$service_name" | tr '-' '_')"
+    hs_auth_value=$(printenv "$hs_auth_var" 2>/dev/null || true)
+    write_client_auth "$service_name" "$service_dir" "$hs_auth_var" "$hs_auth_value" || return 1
+
     # Ensure proper permissions
     chown -R tor:tor "$service_dir" || {
         echo "ERROR: Failed to set ownership on: $service_dir" >&2
