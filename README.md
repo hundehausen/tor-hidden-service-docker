@@ -229,6 +229,46 @@ Inspect the rendered config:
 docker exec tor-hidden-service cat /var/lib/tor/torrc
 ```
 
+### Client authorization
+
+[Client authorization](https://community.torproject.org/onion-services/advanced/client-auth/) hides a service from everyone without an authorized key. `HSAUTH_<SERVICE>` lists the clients as `<client-name>:<public key>`, separated by spaces or newlines:
+
+```yaml
+services:
+  tor:
+    image: ghcr.io/hundehausen/tor-hidden-service:latest
+    environment:
+      HS_SSH: sshd:22:22
+      HSAUTH_SSH: |
+        laptop:T24H4MDCEVW52VOR2WMCTO3N53THCPE4FAVID4A6DYAQGWESJAGA
+        phone:descriptor:x25519:FOUEX34UW5CQI3YUHMKMHGSBJCQU4KNOZIMCVUMPF3WOPF5RA44Q
+```
+
+- **Keys** are base32 x25519 public keys (52 characters, no `=` padding), bare or as `descriptor:x25519:<key>`.
+- **The list is complete**: `.auth` files are rewritten at every start, so a removed client loses access at the next start.
+- **Unset or empty** leaves `authorized_clients` untouched: keys from earlier starts and hand-placed keys keep working. To turn client authorization off, also delete the `.auth` files.
+- **Anything else** (an invalid entry, a duplicate name, no client) stops the container.
+
+Hyphens in service names become underscores (`HS_MY-API` → `HSAUTH_MY_API`).
+
+Generate a key pair on the client:
+
+```bash
+openssl genpkey -algorithm x25519 -out client.pem
+# public key → HSAUTH_<SERVICE>
+openssl pkey -in client.pem -pubout -outform DER | tail -c 32 | base32 | tr -d '='
+# private key → the client's .auth_private file
+openssl pkey -in client.pem -outform DER | tail -c 32 | base32 | tr -d '='
+```
+
+The client's `.auth_private` file holds `<onion address without .onion>:descriptor:x25519:<private key>`.
+
+Inspect the written keys:
+
+```bash
+docker exec tor-hidden-service ls /var/lib/tor/SSH/authorized_clients
+```
+
 ## 🛡️ Security
 
 ### Hardening Checklist
@@ -258,6 +298,7 @@ The entrypoint script validates all inputs:
 - **Service names** - Alphanumeric, hyphens, and underscores only (max 64 chars)
 - **Ports** - Numeric, range 1-65535
 - **Hostnames** - No shell metacharacters allowed
+- **Client authorization** - Client names alphanumeric, hyphens, and underscores only; keys 52 base32 characters
 - **Path traversal** - Prevented via allowlist and path verification
 
 ## 🔑 Key Persistence
